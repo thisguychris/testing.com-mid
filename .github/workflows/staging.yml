@@ -1,0 +1,82 @@
+name: deploy to staging
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: "contains(github.event.head_commit.message, 'ci-build')"
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        lfs: true
+
+    # load secrets
+    - id: secrets
+      name: Secrets
+      uses: GoogleCloudPlatform/github-actions/get-secretmanager-secrets@master
+      with:
+        credentials: ${{ secrets.SECRET_MANAGER }}
+        secrets: |-
+          email:${{ secrets.PROJECT_ID }}/storage-email
+          key:${{ secrets.PROJECT_ID }}/storage-key
+          slack:${{ secrets.PROJECT_ID }}/slack-hook-staging
+          staging:${{ secrets.PROJECT_ID}}/staging
+
+    - name: Set repository name
+      id: repo
+      run: echo ::set-output name=repo::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}')
+      shell: bash
+
+    - name: Set env
+      run: |
+        echo ::set-env name=URL::$(echo "https://${{ steps.secrets.outputs.staging }}/${{ steps.repo.outputs.repo }}")
+        echo ::set-env name=BUCKET::$(echo "gs://${{ steps.secrets.outputs.staging }}/${{ steps.repo.outputs.repo }}")
+        echo ::set-env name=SLACK_HOOK::$(echo "${{ steps.secrets.outputs.slack }}")
+      shell: bash
+
+    - uses: actions/cache@v1
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+
+    - name: Use node.js
+      uses: actions/setup-node@v1
+      with:
+        node-version: 12.x
+
+    - name: Npm install, build, and test
+      run: |
+        npm ci
+        npm run build --if-present
+      env:
+        CI: true
+
+    # Setup gcloud CLI
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        version: '278.0.0'
+        service_account_email: ${{ steps.secrets.outputs.email }}
+        service_account_key: ${{ steps.secrets.outputs.key }}
+
+    # Configure gcloud CLI
+    - name: Gcloud sync
+      run: |
+        gsutil -m rsync -r -d dist/ $BUCKET/
+        gsutil -m setmeta -h "Cache-Control:public, s-maxage=0" $BUCKET/*
+
+    - name: Post to slack
+      if: success()
+      run: |
+        curl -X POST -H 'Content-type: application/json' --data '{"text":"Successfully deployed to '$URL/'!"}' $SLACK_HOOK
+
+    - name: Post to slack if failed
+      if: failure()
+      run: |
+        curl -X POST -H 'Content-type: application/json' --data '{"text":"Failed to deploy '$URL/'!, please check https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} "}' $SLACK_HOOK
