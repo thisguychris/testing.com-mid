@@ -44,7 +44,7 @@ jobs:
         echo ::set-env name=BUCKET::$(echo "gs://${{ steps.secrets.outputs.staging }}/${{ steps.repo.outputs.repo }}")
         echo ::set-env name=SLACK_HOOK::$(echo "${{ steps.secrets.outputs.slack }}")
         echo ::set-env name=DEST_BUCKET::$(echo "gs://${{ steps.secrets.outputs.prod }}/${{ env.REPO }}")
-        [[ ${{ steps.repo.outputs.repo }} == *"-mid" ]] && echo ::set-env name=DEST_BUCKET::$(echo "gs://${{ steps.secrets.outputs.mid }}/${{ env.REPO }}")
+        [[ ${{ steps.repo.outputs.repo }} == *"-mid" ]] && echo ::set-env name=DEST_BUCKET::$(echo "gs://${{ steps.secrets.outputs.mid }}/${{ steps.repo.outputs.repo }}")
         echo ::set-env name=BACKUP::$(echo "s3://${{ steps.secrets.outputs.prod }}/${{ env.REPO }}")
         echo ::set-env name=URL::$(echo "https://${{ env.REPO }}")
         echo ::set-env name=AWS_ACCESS_KEY_ID::$(echo "${{ steps.secrets.outputs.backup-id }}")
