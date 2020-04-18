@@ -10,11 +10,11 @@ jobs:
 
     steps:
 
-    - name: Deployment pending
-      uses: deliverybot/deployment-status@master
-      with:
-        state: 'pending'
-        token: '${{ github.token }}'
+#     - name: Deployment pending
+#       uses: deliverybot/deployment-status@master
+#       with:
+#         state: 'pending'
+#         token: '${{ github.token }}'
 
     # load secrets
     - id: secrets
