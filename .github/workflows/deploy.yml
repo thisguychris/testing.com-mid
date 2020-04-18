@@ -35,13 +35,7 @@ jobs:
       id: repo
       run: |
         echo ::set-output name=repo::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}')
-        echo ::set-env name=REPO::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}')
-      shell: bash
-      
-    - name: Remove mid
-      run: |
-        REPO=${REPO%-mid}
-        export REPO
+        echo ::set-env name=REPO::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}' | sed -e "s/-mid$//")
       shell: bash
       
     - name: Set env
