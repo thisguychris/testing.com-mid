@@ -36,10 +36,14 @@ jobs:
       run: |
         echo ::set-output name=repo::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}')
         echo ::set-env name=REPO::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}')
+      shell: bash
+      
+    - name: Remove mid
+      run: |
         REPO=${REPO%-mid}
         echo $REPO
       shell: bash
-
+      
     - name: Set env
       run: |
         echo ::set-env name=BUCKET::$(echo "gs://${{ steps.secrets.outputs.staging }}/${{ steps.repo.outputs.repo }}")
