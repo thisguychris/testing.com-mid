@@ -40,8 +40,8 @@ jobs:
       
     - name: Remove mid
       run: |
-        export REPO=${REPO%-mid}
-        echo $REPO
+        REPO=${REPO%-mid}
+        export REPO
       shell: bash
       
     - name: Set env
