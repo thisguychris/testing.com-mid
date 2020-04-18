@@ -40,7 +40,7 @@ jobs:
       
     - name: Remove mid
       run: |
-        REPO=${REPO%-mid}
+        export REPO=${REPO%-mid}
         echo $REPO
       shell: bash
       
