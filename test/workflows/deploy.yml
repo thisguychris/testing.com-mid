@@ -1,0 +1,97 @@
+name: deploy to production
+
+on: deployment
+
+jobs:
+  build:
+    if: github.actor == 'thisguychris'
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Deployment pending
+      uses: deliverybot/deployment-status@master
+      with:
+        state: 'pending'
+        token: '${{ github.token }}'
+
+    # load secrets
+    - id: secrets
+      name: Secrets
+      uses: GoogleCloudPlatform/github-actions/get-secretmanager-secrets@master
+      with:
+        credentials: ${{ secrets.SECRET_MANAGER }}
+        secrets: |-
+          email:${{ secrets.PROJECT_ID }}/storage-email
+          key:${{ secrets.PROJECT_ID }}/storage-key
+          slack:${{ secrets.PROJECT_ID }}/slack-hook-prod
+          staging:${{ secrets.PROJECT_ID}}/staging
+          prod:${{ secrets.PROJECT_ID}}/prod
+          backup-id:${{ secrets.PROJECT_ID }}/backup-id
+          backup-key:${{ secrets.PROJECT_ID }}/backup-key
+
+    - name: Set repository name
+      id: repo
+      run: |
+        echo ::set-output name=repo::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}')
+        echo ::set-env name=REPO::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}')
+      shell: bash
+
+    - name: Set env
+      run: |
+        echo ::set-env name=BUCKET::$(echo "gs://${{ steps.secrets.outputs.staging }}/${{ steps.repo.outputs.repo }}")
+        echo ::set-env name=SLACK_HOOK::$(echo "${{ steps.secrets.outputs.slack }}")
+        echo ::set-env name=DEST_BUCKET::$(echo "gs://${{ steps.secrets.outputs.prod }}/${{ env.REPO }}")
+        echo ::set-env name=BACKUP::$(echo "s3://${{ steps.secrets.outputs.prod }}/${{ env.REPO }}")
+        echo ::set-env name=URL::$(echo "https://${{ env.REPO }}")
+        echo ::set-env name=AWS_ACCESS_KEY_ID::$(echo "${{ steps.secrets.outputs.backup-id }}")
+        echo ::set-env name=AWS_SECRET_ACCESS_KEY::$(echo "${{ steps.secrets.outputs.backup-key }}")
+      shell: bash
+
+    # Setup gcloud CLI
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        version: '285.0.0'
+        service_account_email: ${{ steps.secrets.outputs.email }}
+        service_account_key: ${{ steps.secrets.outputs.key }}
+
+    # Configure gcloud CLI
+    - name: Gcloud set up
+      run: |
+        gsutil --version
+        gsutil -m -h "Cache-Control:public, s-maxage=5" rsync -r -d $BUCKET $DEST_BUCKET
+        gsutil -m rsync -r -d -a public-read $BUCKET $BACKUP
+
+    - name: Deployment success
+      if: success()
+      uses: deliverybot/deployment-status@master
+      with:
+        state: 'success'
+        token: '${{ github.token }}'
+        environment-url: '${{ env.URL }}'
+        log-url: '${{ env.URL }}'
+
+    - name: Purge Cloudflare Cache
+      if: success()
+      run: |
+        result=$(curl --request GET \
+          --url https://purge-cache.idw.workers.dev/$REPO | jq '.success')
+        if [ "$result" == "true" ]; then exit 0; else exit 1; fi
+
+    - name: Post To Slack
+      if: success()
+      run: |
+        curl -X POST -H 'Content-type: application/json' --data '{"text":"Successfully deployed to '$URL'!"}' $SLACK_HOOK
+
+    - name: Deployment failure
+      if: failure()
+      uses: deliverybot/deployment-status@master
+      with:
+        state: 'failure'
+        token: '${{ github.token }}'
+
+    - name: Post To Slack
+      if: failure()
+      run: |
+        curl -X POST -H 'Content-type: application/json' --data '{"text":"Failed to deploy '$URL!', please check https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} "}' $SLACK_HOOK
